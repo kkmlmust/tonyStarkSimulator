@@ -1,0 +1,23 @@
+[project]
+name = "dota"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "kkmlmust", email = "ssaturday.nice@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "mediapipe>=1.1.0",
+    "opencv-python>=5.0.0.93",
+]
+
+[project.scripts]
+dota = "dota:main"
+
+[build-system]
+requires = ["uv_build>=0.12.17,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = false
