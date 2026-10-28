@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+.venv/
+*.pt
+
+# recorded gesture dataset (session CSVs)
+src/data/sessions/

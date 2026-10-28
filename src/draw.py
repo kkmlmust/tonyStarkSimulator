@@ -2,13 +2,9 @@ import cv2
 import numpy as np
 from mediapipe.tasks.python.vision import HandLandmarkerResult, HandLandmarksConnections
 
-
-
 HAND_CONNECTIONS = HandLandmarksConnections.HAND_CONNECTIONS
 FINGERTIPS = [4, 8, 12, 16, 20]
-print(type(HAND_CONNECTIONS))
-print(type(next(iter(HAND_CONNECTIONS))))
-print(next(iter(HAND_CONNECTIONS)))
+
 
 def draw_landmarks(frame, hand_landmarks):
     """Рисует 21 точку руки. Кончики пальцев — другим цветом."""
@@ -18,10 +14,10 @@ def draw_landmarks(frame, hand_landmarks):
 
         # кончики пальцев — красные, остальное — зелёное
         if idx in FINGERTIPS:
-            color = (0, 0, 255)      # BGR: красный
+            color = (0, 0, 255)  # BGR: красный
             radius = 7
         else:
-            color = (0, 255, 0)      # BGR: зелёный
+            color = (0, 255, 0)  # BGR: зелёный
             radius = 5
 
         cv2.circle(frame, (cx, cy), radius, color, -1)
@@ -44,18 +40,40 @@ def draw_handedness(frame, hand_landmarks, handedness):
     wrist = hand_landmarks[0]
     cx, cy = int(wrist.x * w), int(wrist.y * h)
 
-    label = handedness.category_name   # "Left" / "Right"
-    score = handedness.score           # 0.0 ... 1.0
+    label = handedness.category_name  # "Left" / "Right"
+    score = handedness.score  # 0.0 ... 1.0
     text = f"{label} {score:.2f}"
 
-    cv2.putText(frame, text, (cx + 10, cy + 10),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    cv2.putText(
+        frame, text, (cx + 10, cy + 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2
+    )
 
 
 def draw_fps(frame, fps):
     """Пишет FPS в левом верхнем углу."""
-    cv2.putText(frame, f"FPS: {fps:.1f}", (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
+    cv2.putText(
+        frame,
+        f"FPS: {fps:.1f}",
+        (10, 30),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 255, 0),
+        2,
+    )
+
+
+def draw_status(frame, text):
+    """Пишет произвольный статус (например, REC/IDLE и число сэмплов)."""
+    cv2.putText(
+        frame,
+        text,
+        (10, 100),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 200, 255),
+        2,
+    )
+
 
 
 def draw_result(frame, result):
@@ -74,3 +92,28 @@ def draw_result(frame, result):
 
         if i < len(result.handedness) and result.handedness[i]:
             draw_handedness(frame, hand_landmarks, result.handedness[i][0])
+
+
+def draw_hand_label(frame, hand_landmarks, slot, gesture, hand=""):
+    """Подписывает конкретную руку: слот, сторону и распознанный жест.
+
+    Рисуется рядом с запястьем, поэтому видно, какая метка какой руке
+    принадлежит (важно, когда рук две).
+    """
+    h, w, _ = frame.shape
+    wrist = hand_landmarks[0]
+    cx, cy = int(wrist.x * w), int(wrist.y * h)
+
+    name = gesture if gesture else "-"
+    side = f"{hand} " if hand else ""
+    text = f"{side}[{slot}] {name}"
+
+    cv2.putText(
+        frame,
+        text,
+        (cx + 10, cy - 10),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 255, 0),
+        2,
+    )

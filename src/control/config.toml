@@ -1,0 +1,35 @@
+# Gesture -> action bindings.
+#
+# Edit this file to change behaviour without touching code.
+# `mode`:
+#   trigger -> action fires once when the gesture appears
+#   hold    -> action is active the whole time the gesture is held
+#              (and `release` runs when the gesture ends)
+# `hand` is optional: "Left", "Right", or omit for any hand.
+# `interval_ms` (hold only) throttles repeats; 0 = every frame.
+
+backend = "ydotool"   # "null" (dry-run) | "pynput" (X11) | "ydotool" (Wayland)
+dry_run = false       # safety: when true, nothing is actually typed/clicked
+
+# --- as requested ---------------------------------------------------------
+# move the cursor (trackpad-style) while the LEFT hand makes "pen_hold":
+# the hand's motion becomes relative mouse movement
+
+[[binding]]
+gesture = "pen_hold"
+hand = "Left"
+mode = "hold"
+  [binding.action]
+  type = "mouse_move"
+  sensitivity = 1200.0   # how far the cursor travels per hand motion
+  deadzone = 0.004       # ignore tiny jitter
+  smoothing = 0.4        # 0 = responsive/raw, ->1 = smoother but laggier
+
+# while EITHER hand makes "f_sign", hold the "g" key down
+
+[[binding]]
+gesture = "f_sign"
+mode = "hold"
+  [binding.action]
+  type = "key"
+  key = "g"

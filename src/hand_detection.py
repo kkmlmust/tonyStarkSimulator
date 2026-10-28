@@ -7,8 +7,9 @@ from mediapipe.tasks.python.vision import (
     HandLandmarkerOptions,
     HandLandmarkerResult,
 )
+from queue import Queue
+from dataclasses import dataclass
 import numpy as np
-
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODEL_PATH = BASE_DIR / "models" / "hand_landmarker.task"
@@ -19,6 +20,12 @@ if not MODEL_PATH.exists():
 MODEL_PATH = str(MODEL_PATH)
 
 BaseOptions = mp.tasks.BaseOptions
+
+
+@dataclass
+class FrameResult:
+    timestamp_ms: int
+    result: HandLandmarkerResult
 
 
 class Hand_tracker:
@@ -36,8 +43,10 @@ class Hand_tracker:
         )
         self.landmarker = HandLandmarker.create_from_options(options)
 
-        self.last_result: HandLandmarkerResult | None = None
+        self.last_result = []
         self.last_timestamp: int | None = None
+
+        self.results_queue: Queue[FrameResult] = Queue()
 
     def _on_result(
         self,
@@ -47,6 +56,13 @@ class Hand_tracker:
     ) -> None:
         self.last_result = result
         self.last_timestamp = timestamp_ms
+
+        self.results_queue.put(
+            FrameResult(
+                timestamp_ms=timestamp_ms,
+                result=result,
+            )
+        )
 
     def procces_frame(self, frame: np.ndarray, timestamp: int) -> None:
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=frame)
