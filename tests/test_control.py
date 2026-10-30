@@ -348,10 +348,11 @@ def test_config_bindings_load_as_requested():
     assert type(pen[0].action).__name__ == "MouseMoveAction"
 
     f = [b for b in config.bindings if b.gesture == "f_sign"]
-    assert len(f) == 1 and f[0].hand is None and f[0].mode is Mode.HOLD, f
-    assert type(f[0].action).__name__ == "KeyAction"
-    assert f[0].action.key == "g" and f[0].action.hold is True, f[0].action
-    print("ok  config: left pen_hold -> mouse move, any f_sign -> hold 'g'")
+    assert len(f) == 1 and f[0].hand == "Right" and f[0].mode is Mode.TRIGGER, f
+    action = f[0].action
+    assert type(action).__name__ == "SendRandomLineAction", action
+    assert action.open_chat == "shift_enter" and action.send == "enter", action
+    print("ok  config: left pen_hold -> mouse move, right f_sign -> chat macro")
 
 
 def test_scroll_action_and_ydotool_keycodes():
@@ -383,6 +384,59 @@ def test_scroll_action_and_ydotool_keycodes():
     else:
         raise AssertionError("multi-key strings should be rejected")
     print("ok  scroll action + ydotool keycode mapping")
+
+
+def test_send_random_line_macro_sequence():
+    from control.actions import ActionContext, build_action
+    from control.backends import NullBackend
+
+    events = []
+
+    class RecordingBackend(NullBackend):
+        def tap_combo(self, keys):
+            events.append(("combo", "+".join(keys)))
+
+        def set_clipboard(self, text):
+            events.append(("clipboard", text))
+
+    ctx = ActionContext(landmarks=fake_hand(0.5), frame_size=(640, 480),
+                        gesture="f_sign", hand="Right", slot=0)
+    action = build_action({
+        "type": "send_random_line",
+        "csv_path": "src/control/test.csv",
+        "open_chat": "shift_enter",
+        "send": "enter",
+    })
+    # No real delays in tests.
+    action.pre_delay = 0.0
+    action.post_delay = 0.0
+
+    action.perform(ctx, RecordingBackend())
+
+    kinds = [e[0] for e in events]
+    assert kinds == ["combo", "clipboard", "combo", "combo"], events
+    assert events[0] == ("combo", "leftshift+enter"), events[0]  # open chat
+    assert events[2] == ("combo", "leftctrl+v"), events[2]  # paste
+    assert events[3] == ("combo", "enter"), events[3]  # send
+
+    # The pasted text must actually be one of the CSV lines.
+    from control.macros import load_lines
+
+    assert events[1][1] in load_lines("src/control/test.csv"), events[1]
+
+    # "enter" (normal chat) must send with a bare Enter.
+    events.clear()
+    action2 = build_action({
+        "type": "send_random_line",
+        "csv_path": "src/control/test.csv",
+        "open_chat": "enter",
+        "send": "enter",
+    })
+    action2.pre_delay = 0.0
+    action2.post_delay = 0.0
+    action2.perform(ctx, RecordingBackend())
+    assert events[0] == ("combo", "enter"), events[0]
+    print("ok  send_random_line macro: open -> clipboard -> paste -> send")
 
 
 # --------------------------------------------------------------------------- #

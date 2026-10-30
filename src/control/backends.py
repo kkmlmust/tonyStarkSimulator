@@ -56,6 +56,15 @@ class NullBackend:
     def scroll(self, amount: int) -> None:
         self._log(f"[dry-run] scroll {amount:+d}")
 
+    def set_clipboard(self, text: str) -> None:
+        self._log(f"[dry-run] set clipboard {text!r}")
+
+    def type_text(self, text: str) -> None:
+        self._log(f"[dry-run] type {text!r}")
+
+    def tap_combo(self, keys: list[str]) -> None:
+        self._log(f"[dry-run] combo {'+'.join(keys)}")
+
 
 _BUTTONS = {"left": "left", "right": "right", "middle": "middle"}
 
@@ -64,12 +73,15 @@ class PynputBackend:
     """Real input via ``pynput`` (X11 / Xwayland)."""
 
     def __init__(self) -> None:
+        import os
+
         from pynput.keyboard import Controller as KeyboardController
         from pynput.mouse import Button, Controller as MouseController
 
         self._keyboard = KeyboardController()
         self._mouse = MouseController()
         self._Button = Button
+        self._env = dict(os.environ)
 
     def _button(self, name: str):
         if name not in _BUTTONS:
@@ -101,6 +113,21 @@ class PynputBackend:
     def scroll(self, amount: int) -> None:
         self._mouse.scroll(0, amount)
 
+    def set_clipboard(self, text: str) -> None:
+        # pynput has no clipboard API; delegate to a clipboard helper.
+        _copy_to_clipboard(text, self._env)
+
+    def type_text(self, text: str) -> None:
+        self._keyboard.type(text)
+
+    def tap_combo(self, keys: list[str]) -> None:
+        # pynput needs modifier names spelled as Key.* for release handling;
+        # press all, then release in reverse.
+        for key in keys:
+            self._keyboard.press(key)
+        for key in reversed(keys):
+            self._keyboard.release(key)
+
 
 # Linux evdev keycodes (see /usr/include/linux/input-event-codes.h).
 # ydotool 1.x takes raw keycodes, not key names, so we map the common ones.
@@ -117,6 +144,24 @@ _YDOTOOL_KEYCODES: dict[str, int] = {
 
 # Mouse button base numbers; `| 0x40` = down, `| 0x80` = up.
 _YDOTOOL_BUTTONS = {"left": 0x00, "right": 0x01, "middle": 0x02}
+
+
+def _copy_to_clipboard(text: str, env: dict | None = None) -> None:
+    """Put ``text`` on the Wayland clipboard using whichever tool exists.
+
+    Needed because ydotool can only type using a built-in US keymap, which
+    mangles non-ASCII text (and any non-US layout). Pasting from the
+    clipboard sidesteps layout entirely.
+    """
+    # wl-copy is the standard Wayland tool. `--trim-newline` keeps it simple.
+    for cmd in (["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "-ib"]):
+        if shutil.which(cmd[0]):
+            subprocess.run(cmd, input=text, text=True, env=env, check=False)
+            return
+    raise RuntimeError(
+        "no clipboard tool found (install wl-clipboard, xclip or xsel) -- "
+        "required to paste non-ASCII text reliably"
+    )
 
 
 def _keycode(key: str) -> int:
@@ -222,6 +267,24 @@ class YdotoolBackend:
     def scroll(self, amount: int) -> None:
         # Positive amount scrolls up (REL_WHEEL convention).
         self._run("mousemove", "-w", "-x", "0", "-y", str(int(amount)))
+
+    # -- text -------------------------------------------------------------- #
+    def set_clipboard(self, text: str) -> None:
+        _copy_to_clipboard(text, self._env)
+
+    def type_text(self, text: str) -> None:
+        # ydotool types with a US keymap; fine for plain ASCII test data,
+        # but prefer set_clipboard + paste for anything else.
+        self._run("type", "--", text)
+
+    def tap_combo(self, keys: list[str]) -> None:
+        """Press several keys together, e.g. ``["leftctrl", "v"]``.
+
+        Used for shortcuts like Ctrl+V or Shift+Enter.
+        """
+        codes = [_keycode(k) for k in keys]
+        seq = [f"{code}:1" for code in codes] + [f"{code}:0" for code in reversed(codes)]
+        self._run("key", *seq)
 
 
 _BACKENDS = {

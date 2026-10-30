@@ -185,4 +185,16 @@ def build_action(spec: dict, mode: "Mode | None" = None) -> Action:
             amount=int(spec.get("amount", 1)),
             ticks=int(spec.get("ticks", 1)),
         )
+    if action_type == "send_random_line":
+        # Imported here to avoid a circular import (macros imports actions).
+        from .macros import SendRandomLineAction
+
+        return SendRandomLineAction(
+            csv_path=str(spec.get("csv_path", "")),
+            open_chat=str(spec.get("open_chat", "shift_enter")),
+            send=str(spec.get("send", "enter")),
+            column=spec.get("column"),
+            pre_delay=float(spec.get("pre_delay", 0.15)),
+            post_delay=float(spec.get("post_delay", 0.1)),
+        )
     raise ValueError(f"unknown action type: {action_type!r}")

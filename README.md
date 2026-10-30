@@ -88,6 +88,29 @@ identity (A) → state (C/D) → bindings (D) → actions (E) → backend
 
 Edits to bindings go in `src/control/config.toml` — no code changes needed.
 
+### Chat macro (`send_random_line`)
+
+Opens chat, pastes a random line from a CSV and sends it:
+
+```toml
+[[binding]]
+gesture = "f_sign"
+hand = "Right"
+mode = "trigger"
+  [binding.action]
+  type = "send_random_line"
+  csv_path = "src/control/test.csv"
+  open_chat = "shift_enter"   # "shift_enter" = team/command chat | "enter" = normal
+  send = "enter"              # "enter" | "shift_enter"
+```
+
+- `csv_path` — one phrase per line; commas inside a phrase are kept.
+  Use `column = 0` if you want a specific column of a real CSV instead.
+- `open_chat` — how to open the chat: `shift_enter` (all/team chat) or `enter`.
+- `send` — how to submit after pasting.
+
+Requires a clipboard tool (`wl-clipboard` on Wayland); see below.
+
 ### Safety
 
 - `dry_run = true` in the config by default: actions are **logged, not
@@ -96,6 +119,9 @@ Edits to bindings go in `src/control/config.toml` — no code changes needed.
 - On this machine the session is **Wayland**, where `pynput` is often
   ignored by the compositor. Use `ydotool` (needs its daemon) for real
   Wayland input.
+- The chat macro needs a clipboard tool because `ydotool` can only type with
+  a built-in US keymap (it would mangle Cyrillic / non-US layouts). Install
+  one: `sudo pacman -S wl-clipboard`.
 
 ### Tests
 

@@ -11,7 +11,7 @@
 backend = "ydotool"   # "null" (dry-run) | "pynput" (X11) | "ydotool" (Wayland)
 dry_run = false       # safety: when true, nothing is actually typed/clicked
 
-# --- as requested ---------------------------------------------------------
+# --- mouse control --------------------------------------------------------
 # move the cursor (trackpad-style) while the LEFT hand makes "pen_hold":
 # the hand's motion becomes relative mouse movement
 
@@ -25,11 +25,15 @@ mode = "hold"
   deadzone = 0.004       # ignore tiny jitter
   smoothing = 0.4        # 0 = responsive/raw, ->1 = smoother but laggier
 
-# while EITHER hand makes "f_sign", hold the "g" key down
+# --- chat macro -----------------------------------------------------------
+# RIGHT hand "f_sign": open chat, paste a random line from a CSV, send it.
 
 [[binding]]
 gesture = "f_sign"
-mode = "hold"
+hand = "Right"
+mode = "trigger"
   [binding.action]
-  type = "key"
-  key = "g"
+  type = "send_random_line"
+  csv_path = "src/control/insults_dataset.csv"
+  open_chat = "shift_enter"   # "shift_enter" = command chat | "enter" = normal
+  send = "enter"              # "enter" | "shift_enter"
