@@ -97,6 +97,7 @@ class ControlConfig:
     bindings: list[Binding]
     backend: str = "null"
     dry_run: bool = True
+    layout: str | None = None
 
 
 def load_config(path: Path | str) -> ControlConfig:
@@ -107,6 +108,7 @@ def load_config(path: Path | str) -> ControlConfig:
         bindings=[parse_binding(raw) for raw in data.get("binding", [])],
         backend=str(data.get("backend", "null")),
         dry_run=bool(data.get("dry_run", True)),
+        layout=data.get("layout"),
     )
 
 

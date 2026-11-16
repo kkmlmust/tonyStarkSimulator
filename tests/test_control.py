@@ -347,8 +347,8 @@ def test_config_bindings_load_as_requested():
     assert len(pen) == 1 and pen[0].hand == "Left" and pen[0].mode is Mode.HOLD, pen
     assert type(pen[0].action).__name__ == "MouseMoveAction"
 
-    f = [b for b in config.bindings if b.gesture == "f_sign"]
-    assert len(f) == 1 and f[0].hand == "Right" and f[0].mode is Mode.TRIGGER, f
+    f = [b for b in config.bindings if b.gesture == "f_sign" and b.hand == "Right"]
+    assert len(f) == 1 and f[0].mode is Mode.TRIGGER, f
     action = f[0].action
     assert type(action).__name__ == "SendRandomLineAction", action
     assert action.open_chat == "shift_enter" and action.send == "enter", action
@@ -480,6 +480,73 @@ def test_slot_expires_after_grace():
     result = identity.update([fake_hand(0.2)], handedness("Right"))
     assert result[0][0] == 1, result
     print("ok  slot expires after grace period")
+
+
+def test_layout_switcher_parses_and_switches():
+    from control.layout import LayoutSwitcher, parse_layouts
+
+    # The exact shape qdbus6 --literal prints for the a(sss) layout list.
+    raw = (
+        '[Argument: a(sss) {[Argument: (sss) "us", "", "English (US)"], '
+        '[Argument: (sss) "ru", "", "Russian"]}]'
+    )
+    rows = parse_layouts(raw)
+    assert rows == [("us", "", "English (US)"), ("ru", "", "Russian")], rows
+
+    # Unparseable output must not crash -- just yields nothing.
+    assert parse_layouts("garbage") == []
+    assert parse_layouts("") == []
+
+    # A missing qdbus client disables the switcher instead of raising.
+    sw = LayoutSwitcher(target="us", binary="qdbus-does-not-exist")
+    assert sw.enabled is False and sw.index is None
+    assert sw.activate() is None  # no-op
+    print("ok  layout switcher parses layout lists and degrades gracefully")
+
+
+def test_ydotool_forces_latin_layout_for_keys():
+    from control.backends import YdotoolBackend
+
+    class FakeSwitcher:
+        enabled = True
+        index = 0
+
+        def __init__(self):
+            self.calls = []
+
+        def activate(self):
+            self.calls.append("activate")
+            return 1  # previous layout index (ru)
+
+        def restore(self, saved):
+            self.calls.append(("restore", saved))
+
+    backend = YdotoolBackend(probe=False, layout=None)  # no live D-Bus probe
+    fake = FakeSwitcher()
+    backend._switcher = fake
+
+    sent = []
+    backend._run = lambda *args: sent.append(args)  # don't touch the daemon
+
+    # A tap switches to Latin, sends the key, then restores the old layout.
+    backend.tap_key("g")
+    assert sent == [("key", "34:1", "34:0")], sent
+    assert fake.calls == ["activate", ("restore", 1)], fake.calls
+
+    # A held key must keep Latin active until it is released.
+    fake.calls.clear()
+    backend.key_down("g")
+    assert fake.calls == ["activate"], fake.calls
+    backend.key_up("g")
+    assert fake.calls == ["activate", ("restore", 1)], fake.calls
+
+    # A combo (Ctrl+V) is one Latin-wrapped emission.
+    fake.calls.clear()
+    sent.clear()
+    backend.tap_combo(["leftctrl", "v"])
+    assert sent == [("key", "29:1", "47:1", "47:0", "29:0")], sent
+    assert fake.calls == ["activate", ("restore", 1)], fake.calls
+    print("ok  ydotool wraps key events in a Latin-layout switch")
 
 
 def main() -> None:

@@ -4,6 +4,7 @@ A webcam pipeline that detects a hand, extracts 21 landmarks, and classifies
 the gesture with a small neural network — the "Tony Stark control panel" idea
 from `context.md`.
 
+
 ```
 webcam -> OpenCV -> MediaPipe landmarks -> normalization -> MLP -> gesture label
 ```
@@ -87,6 +88,109 @@ identity (A) → state (C/D) → bindings (D) → actions (E) → backend
   (`null` = dry-run, `pynput` = X11, `ydotool` = Wayland).
 
 Edits to bindings go in `src/control/config.toml` — no code changes needed.
+
+### How to add a new binding
+
+A binding says: *when hand X makes gesture G, do action A*. Add a
+`[[binding]]` block to `src/control/config.toml`, save, and restart
+`camera.py` (the config is read once at start).
+
+**Minimal example — press `d` when the right hand makes a fist:**
+
+```toml
+[[binding]]
+gesture = "fist"        # required: one of the 5 gestures (see above)
+hand = "Right"          # optional: "Left" | "Right" | omit = any hand
+mode = "trigger"        # "trigger" (once) | "hold" (while held)
+  [binding.action]      # the nested [binding.action] table is required
+  type = "key"          # which action to run (see the table below)
+  key = "d"
+```
+
+**Field reference:**
+
+| Field | Required | Meaning |
+|---|---|---|
+| `gesture` | yes | `f_sign`, `v_sign`, `pen_hold`, `palm_hand`, `fist` |
+| `hand` | no | `"Left"`, `"Right"`, or omit for any hand |
+| `mode` | no | `"trigger"` (default) or `"hold"` |
+| `interval_ms` | no | `hold` only: throttle repeats (0 = every frame) |
+
+**Choosing a mode:**
+
+- `trigger` — fires **once** when the gesture appears. Use for discrete
+  actions: press a key, send a chat message, click once.
+- `hold` — active for the **whole time** the gesture is held, and `release`
+  runs when it ends. Use for continuous actions: move the mouse, hold a key
+  down, hold a mouse button.
+
+**Available action `type`s** — each needs the fields listed here (everything
+else in `[binding.action]` is ignored):
+
+| `type` | Required action fields | Optional | What it does |
+|---|---|---|---|
+| `key` | `key` | — | Press a key (`hold` holds it down) |
+| `mouse_move` | — | `sensitivity`, `deadzone`, `smoothing` | Move cursor like a trackpad |
+| `mouse_button` | `button` | — | Hold a mouse button (`left`/`right`/`middle`) |
+| `scroll` | — | `amount`, `ticks` | Scroll the wheel (positive = up) |
+| `send_random_line` | `csv_path` | `open_chat`, `send`, `column` | Chat macro (below) |
+
+**Copy-paste examples, one per action:**
+
+```toml
+# 1) press a key once (right hand fist -> "d")
+[[binding]]
+gesture = "fist"
+hand = "Right"
+mode = "trigger"
+  [binding.action]
+  type = "key"
+  key = "d"
+
+# 2) hold a key down for as long as the gesture is held
+[[binding]]
+gesture = "fist"
+hand = "Left"
+mode = "hold"
+  [binding.action]
+  type = "key"
+  key = "shift"          # while held; released when the gesture ends
+
+# 3) move the cursor (trackpad style)
+[[binding]]
+gesture = "pen_hold"
+hand = "Left"
+mode = "hold"
+  [binding.action]
+  type = "mouse_move"
+  sensitivity = 1200.0
+  deadzone = 0.004
+  smoothing = 0.4
+
+# 4) hold a mouse button
+[[binding]]
+gesture = "palm_hand"
+hand = "Right"
+mode = "hold"
+  [binding.action]
+  type = "mouse_button"
+  button = "right"
+
+# 5) scroll the wheel (auto-repeat while held)
+[[binding]]
+gesture = "v_sign"
+mode = "hold"
+interval_ms = 60
+  [binding.action]
+  type = "scroll"
+  amount = 1             # +1 = up, -1 = down
+```
+
+> **Keyboard layout.** Backends send *physical* key codes, so on their own the
+> letter would depend on your **active layout**: with Russian selected,
+> `key = "j"` produces `о`. The `ydotool` backend fixes this automatically:
+> it briefly switches to a Latin layout around every key press (set
+> `layout = "us"` in `config.toml`, or `"none"` to disable).
 
 ### Chat macro (`send_random_line`)
 

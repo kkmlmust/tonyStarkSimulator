@@ -53,7 +53,7 @@ def main() -> None:
     # Control layer (layer E). dry_run guarantees nothing is typed/clicked
     # until you explicitly arm it.
     config = load_config(CONFIG_PATH)
-    backend = build_backend("null" if config.dry_run else config.backend)
+    backend = build_backend("null" if config.dry_run else config.backend, layout=config.layout)
     dispatcher = Dispatcher(bindings=config.bindings, backend=backend)
     armed = False  # press `a` to arm/disarm real actions
 

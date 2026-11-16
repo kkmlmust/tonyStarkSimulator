@@ -11,6 +11,13 @@
 backend = "ydotool"   # "null" (dry-run) | "pynput" (X11) | "ydotool" (Wayland)
 dry_run = false       # safety: when true, nothing is actually typed/clicked
 
+# ydotool sends *physical* keycodes, and the active layout turns them into
+# letters. On a non-Latin layout `key = "g"` would produce `п`. To keep
+# Latin bindings correct, the backend briefly switches to this layout around
+# every key press and then restores yours. Set to "none" to disable, or to a
+# layout code/name from your system (e.g. "us", "ru", "English (US)").
+layout = "us"
+
 # --- mouse control --------------------------------------------------------
 # move the cursor (trackpad-style) while the LEFT hand makes "pen_hold":
 # the hand's motion becomes relative mouse movement

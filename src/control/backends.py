@@ -25,11 +25,13 @@ import os
 import shutil
 import subprocess
 
+from .layout import LayoutSwitcher
+
 
 class NullBackend:
     """Logs actions instead of performing them (dry-run)."""
 
-    def __init__(self, logger=print) -> None:
+    def __init__(self, logger=print, layout: str | None = None) -> None:
         self._log = logger
 
     def tap_key(self, key: str) -> None:
@@ -197,7 +199,7 @@ class YdotoolBackend:
     """
 
     def __init__(self, binary: str = "ydotool", socket: str | None = None,
-                 probe: bool = True) -> None:
+                 probe: bool = True, layout: str | None = "us") -> None:
         if shutil.which(binary) is None:
             raise RuntimeError(
                 f"{binary!r} not found on PATH. Install ydotool and start its "
@@ -205,8 +207,24 @@ class YdotoolBackend:
             )
         self._bin = binary
         self._env = dict(os.environ)
+        self._saved: dict[str, int | None] = {}
         if socket:
             self._env["YDOTOOL_SOCKET"] = socket
+
+        # ydotool emits *physical* keycodes; the active layout decides the
+        # letter. To keep Latin bindings (key = "g") reliable on a non-Latin
+        # layout, we briefly switch to a Latin one around each key emission.
+        # `layout = "none"` disables this.
+        self._switcher: LayoutSwitcher | None = None
+        if layout and layout.lower() not in {"none", "off", "disable", "disabled"}:
+            self._switcher = LayoutSwitcher(target=layout)
+            if not self._switcher.enabled:
+                print(
+                    "[layout] WARNING: could not find a Latin layout to switch "
+                    "to; keys will follow the active layout."
+                )
+                self._switcher = None
+
         if probe:
             self._warn_if_unreachable()
 
@@ -215,6 +233,17 @@ class YdotoolBackend:
         return subprocess.run(
             [self._bin, *args], capture_output=True, text=True, env=self._env
         )
+
+    def _key(self, *codes: str) -> None:
+        """Send key events, optionally forcing the Latin layout first."""
+        if self._switcher is None:
+            self._run("key", *codes)
+            return
+        saved = self._switcher.activate()
+        try:
+            self._run("key", *codes)
+        finally:
+            self._switcher.restore(saved)
 
     def _warn_if_unreachable(self) -> None:
         # `key 0:1` is harmless (non-interpretable -> only a delay) but still
@@ -231,13 +260,22 @@ class YdotoolBackend:
     # -- keyboard ---------------------------------------------------------- #
     def tap_key(self, key: str) -> None:
         code = _keycode(key)
-        self._run("key", f"{code}:1", f"{code}:0")
+        self._key(f"{code}:1", f"{code}:0")
 
     def key_down(self, key: str) -> None:
+        # For a `hold` binding the key stays down until key_up(): keep the
+        # Latin layout active the whole time so auto-repeat stays Latin.
+        if self._switcher is None:
+            self._run("key", f"{_keycode(key)}:1")
+            return
+        saved = self._switcher.activate()
+        self._saved[key] = saved
         self._run("key", f"{_keycode(key)}:1")
 
     def key_up(self, key: str) -> None:
         self._run("key", f"{_keycode(key)}:0")
+        if self._switcher is not None:
+            self._switcher.restore(self._saved.pop(key, None))
 
     # -- mouse ------------------------------------------------------------- #
     def move_mouse(self, x: float, y: float) -> None:
@@ -275,7 +313,14 @@ class YdotoolBackend:
     def type_text(self, text: str) -> None:
         # ydotool types with a US keymap; fine for plain ASCII test data,
         # but prefer set_clipboard + paste for anything else.
-        self._run("type", "--", text)
+        if self._switcher is None:
+            self._run("type", "--", text)
+            return
+        saved = self._switcher.activate()
+        try:
+            self._run("type", "--", text)
+        finally:
+            self._switcher.restore(saved)
 
     def tap_combo(self, keys: list[str]) -> None:
         """Press several keys together, e.g. ``["leftctrl", "v"]``.
@@ -284,7 +329,7 @@ class YdotoolBackend:
         """
         codes = [_keycode(k) for k in keys]
         seq = [f"{code}:1" for code in codes] + [f"{code}:0" for code in reversed(codes)]
-        self._run("key", *seq)
+        self._key(*seq)
 
 
 _BACKENDS = {
@@ -294,10 +339,16 @@ _BACKENDS = {
 }
 
 
-def build_backend(name: str):
-    """Instantiate a backend by name (``null`` / ``pynput`` / ``ydotool``)."""
+def build_backend(name: str, layout: str | None = None):
+    """Instantiate a backend by name (``null`` / ``pynput`` / ``ydotool``).
+
+    ``layout`` selects the Latin layout ydotool switches to while sending
+    keys (ignored by the other backends).
+    """
     name = (name or "null").lower()
     if name not in _BACKENDS:
         raise ValueError(f"unknown backend {name!r}; choose from {sorted(_BACKENDS)}")
+    if name == "ydotool":
+        return YdotoolBackend(layout=layout if layout is not None else "us")
     return _BACKENDS[name]()
 
